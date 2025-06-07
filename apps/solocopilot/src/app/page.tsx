@@ -1,8 +1,8 @@
 import { Button } from "@/components/ui/button";
-import { api } from "@/modules/api";
+import { apiRemote } from "@/modules/api";
 
 export default async function Home() {
-  const userData = await api.get('gw').json()
+  const userData = await apiRemote.get('gw').json()
   return (
     <div className="flex flex-col items-center justify-center min-h-screen py-2">
       <h1 className="text-4xl"><span className="font-bold">Solo</span>Copilot</h1>
