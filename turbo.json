@@ -4,10 +4,10 @@
   "globalDependencies": [".env*"], 
   "tasks": {
     "build": {
-      "env": ["GW_API_URL", "GW_USER_ID", "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY"],
       "dependsOn": ["^build"],
       "inputs": ["$TURBO_DEFAULT$", ".env*"],
-      "outputs": [".next/**", "!.next/cache/**"]
+      "outputs": [".next/**", "!.next/cache/**", "dist/**"],
+      "env": ["GW_API_URL", "GW_USER_ID", "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY", "CLERK_SECRET_KEY"]
     },
     "lint": {
       "dependsOn": ["^lint"]
