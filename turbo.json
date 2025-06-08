@@ -4,7 +4,7 @@
   "globalDependencies": [".env*"], 
   "tasks": {
     "build": {
-      "env": ["GW_API_URL_LOCAL", "GW_API_URL_REMOTE", "GW_USER_ID_LOCAL", "GW_USER_ID_REMOTE"],
+      "env": ["GW_API_URL", "GW_USER_ID", "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY"],
       "dependsOn": ["^build"],
       "inputs": ["$TURBO_DEFAULT$", ".env*"],
       "outputs": [".next/**", "!.next/cache/**"]
