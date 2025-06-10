@@ -7,6 +7,7 @@ import {
   SignedOut,
   UserButton,
 } from '@clerk/nextjs'
+import { TRPCReactProvider } from "@/trpc/client";
 import { Host_Grotesk, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -32,6 +33,7 @@ export default function RootLayout({
 }>) {
   return (
      <ClerkProvider>
+      <TRPCReactProvider>
       <html lang="en">
         <body className={`${hostGrotesk.variable} ${geistMono.variable} antialiased`}>
           <header className="flex justify-end items-center p-4 gap-4 h-16">
@@ -46,6 +48,7 @@ export default function RootLayout({
           {children}
         </body>
       </html>
+      </TRPCReactProvider>
     </ClerkProvider>
   );
 }

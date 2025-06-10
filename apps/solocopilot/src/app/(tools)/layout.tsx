@@ -1,6 +1,6 @@
 
 import { ClerkProvider } from '@clerk/nextjs'
-
+import { Toaster } from "sonner";
 
 export default function ToolsLayout({
   children,
@@ -8,11 +8,9 @@ export default function ToolsLayout({
   children: React.ReactNode;
 }>) {
   return (
-
     <ClerkProvider>
-
-            {children}
-
+    <Toaster />
+    {children}
     </ClerkProvider>
   );
 }
