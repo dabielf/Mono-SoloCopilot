@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "check-types": "tsc --noEmit",
     "clean": "rm -rf .next"
   },
   "dependencies": {
@@ -31,7 +32,7 @@
     "@radix-ui/react-switch": "^1.2.5",
     "@radix-ui/react-tabs": "^1.1.12",
     "@radix-ui/react-tooltip": "^1.2.7",
-    "@repo/hono-client": "workspace:*",
+    "@repo/zod-types": "workspace:*",
     "@tanstack/react-query": "^5.80.6",
     "@trpc/client": "^11.3.1",
     "@trpc/next": "^11.3.1",

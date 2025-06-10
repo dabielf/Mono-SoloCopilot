@@ -1,13 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from "motion/react";
 import { 
   User, 
   Sliders, 
   Sparkles, 
   Info, 
-  Plus, 
   X, 
   Lightbulb,
   Loader2,
@@ -15,7 +15,7 @@ import {
   Save,
   Copy,
   FileText,
-  FileCode
+  FileCode,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -23,10 +23,17 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import type { 
+  InsightWithRelations, 
+  GhostwriterList, 
+  PsyProfileList, 
+  WritingProfileList, 
+  PersonaList 
+} from "@repo/zod-types";
 import { useTRPC } from "@/trpc/client";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -36,23 +43,44 @@ type GenerationMode = "writer" | "custom";
 export function GenerationWorkspace() {
   const trpc = useTRPC();
   const { data: overview } = useQuery(trpc.gw.listAll.queryOptions());
+  const searchParams = useSearchParams();
+
+  const writerId = searchParams.get("writer");
   
   // Generation state
   const [mode, setMode] = useState<GenerationMode>("writer");
-  const [selectedWriter, setSelectedWriter] = useState<string>("");
+  const [selectedWriter, setSelectedWriter] = useState<string>(writerId || "");
   const [selectedPsyProfile, setSelectedPsyProfile] = useState<string>("");
   const [selectedWritingProfile, setSelectedWritingProfile] = useState<string>("");
   const [selectedPersona, setSelectedPersona] = useState<string>("");
   const [instructions, setInstructions] = useState("");
-  const [selectedInsights, setSelectedInsights] = useState<string[]>([]);
+  const [selectedInsight, setSelectedInsight] = useState<string>("");
   const [generatedContent, setGeneratedContent] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
 
-  const data = overview?.[0];
-  const ghostwriters = data?.ghostwriters || [];
-  const psyProfiles = data?.psyProfiles || [];
-  const writingProfiles = data?.writingProfiles || [];
-  const personas = data?.personas || [];
+  const data = overview ? overview[0] : undefined;
+  const ghostwriters: GhostwriterList[] = data?.ghostwriters || [];
+  const psyProfiles: PsyProfileList[] = data?.psyProfiles || [];
+  const writingProfiles: WritingProfileList[] = data?.writingProfiles || [];
+  const personas: PersonaList[] = data?.personas || [];
+  
+  // Fetch insights when a persona is selected
+  const { data: insightsData, isLoading: insightsLoading, refetch: refetchInsights } = useQuery({
+    ...trpc.gw.insights.list.queryOptions({ 
+      personaId: selectedPersona || undefined,
+      page: 1,
+      limit: 100 // Get all insights for the persona
+    }),
+    enabled: !!selectedPersona // Only fetch when a persona is selected
+  });
+  
+  const insights: InsightWithRelations[] = (() => {
+    if (!insightsData) return [];
+    if (Array.isArray(insightsData)) return insightsData;
+    if (insightsData.data && Array.isArray(insightsData.data)) return insightsData.data;
+    return [];
+  })();
+  
 
   // TRPC mutations
   const generateContentMutationOptions = trpc.gw.content.generate.mutationOptions({
@@ -61,7 +89,7 @@ export function GenerationWorkspace() {
       toast.success("Content generated successfully!");
     },
     onError: (error) => {
-      toast.error("Failed to generate content. Please try again.");
+      toast.error(`Failed to generate content: ${error.message}`);
     },
     onSettled: () => {
       setIsGenerating(false);
@@ -100,24 +128,38 @@ export function GenerationWorkspace() {
     
     try {
       // Prepare the payload based on the mode
-      const payload = mode === "writer" 
-        ? { 
-            gwId: selectedWriter,
-            personaProfileId: selectedPersona || undefined,
-            topic: instructions,
-            insightId: selectedInsights.length > 0 ? selectedInsights[0] : undefined
-          }
-        : { 
-            psychologyProfileId: selectedPsyProfile,
-            writingProfileId: selectedWritingProfile,
-            personaProfileId: selectedPersona || undefined,
-            topic: instructions,
-            insightId: selectedInsights.length > 0 ? selectedInsights[0] : undefined
-          };
+      let payload;
+      
+      if (mode === "writer") {
+        // Find the selected ghostwriter to get its profile IDs
+        const writer = ghostwriters.find(w => w.id.toString() === selectedWriter);
+        if (!writer || !writer.psyProfileId || !writer.writingProfileId) {
+          toast.error("Selected ghostwriter doesn't have complete profiles");
+          setIsGenerating(false);
+          return;
+        }
+        
+        payload = {
+          psychologyProfileId: writer.psyProfileId.toString(),
+          writingProfileId: writer.writingProfileId.toString(),
+          gwId: selectedWriter,
+          personaProfileId: selectedPersona || undefined,
+          topic: instructions,
+          insightId: selectedInsight || undefined
+        };
+      } else {
+        payload = { 
+          psychologyProfileId: selectedPsyProfile,
+          writingProfileId: selectedWritingProfile,
+          personaProfileId: selectedPersona || undefined,
+          topic: instructions,
+          insightId: selectedInsight || undefined
+        };
+      }
       
       await generateContentMutation.mutateAsync(payload);
     } catch (error) {
-      // Error handling is done in the mutation's onError callback
+      console.error("Failed to generate content:", error);
     }
   };
 
@@ -158,11 +200,28 @@ export function GenerationWorkspace() {
     
     try {
       // Prepare the save payload
+      let psyProfileId: string;
+      let writingProfileId: string;
+      
+      if (mode === "writer") {
+        // Find the selected ghostwriter to get its profile IDs
+        const writer = ghostwriters.find(w => w.id.toString() === selectedWriter);
+        if (!writer || !writer.psyProfileId || !writer.writingProfileId) {
+          toast.error("Selected ghostwriter doesn't have complete profiles");
+          return;
+        }
+        psyProfileId = writer.psyProfileId.toString();
+        writingProfileId = writer.writingProfileId.toString();
+      } else {
+        psyProfileId = selectedPsyProfile;
+        writingProfileId = selectedWritingProfile;
+      }
+      
       const payload = {
         content: generatedContent,
         gwId: mode === "writer" ? selectedWriter : undefined,
-        psyProfileId: mode === "custom" ? selectedPsyProfile : (selectedPsyProfile || undefined),
-        writingProfileId: mode === "custom" ? selectedWritingProfile : (selectedWritingProfile || undefined),
+        psyProfileId,
+        writingProfileId,
         personaProfileId: selectedPersona || undefined,
         prompt: instructions,
         userFeedback: undefined, // Can be added later
@@ -226,22 +285,6 @@ export function GenerationWorkspace() {
                           </SelectContent>
                         </Select>
                       </div>
-                      
-                      <div>
-                        <Label htmlFor="persona-select">Target Persona (Optional)</Label>
-                        <Select value={selectedPersona} onValueChange={setSelectedPersona}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select target audience" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {personas.map((persona) => (
-                              <SelectItem key={persona.id} value={persona.id.toString()}>
-                                {persona.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
                     </TabsContent>
                     
                     <TabsContent value="custom" className="space-y-4 mt-0">
@@ -276,25 +319,35 @@ export function GenerationWorkspace() {
                           </SelectContent>
                         </Select>
                       </div>
-                      
-                      <div>
-                        <Label htmlFor="persona-custom-select">Target Persona (Optional)</Label>
-                        <Select value={selectedPersona} onValueChange={setSelectedPersona}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select target audience" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {personas.map((persona) => (
-                              <SelectItem key={persona.id} value={persona.id.toString()}>
-                                {persona.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
                     </TabsContent>
                   </div>
                 </Tabs>
+              </div>
+
+              {/* Persona Selection - Shared between both modes */}
+              <div>
+                <Label htmlFor="persona-select">Target Persona (Optional)</Label>
+                <Select 
+                  value={selectedPersona} 
+                  onValueChange={(value) => {
+                    setSelectedPersona(value);
+                    setSelectedInsight(""); // Reset insight when persona changes
+                    if (value) {
+                      refetchInsights(); // Refetch insights for new persona
+                    }
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select target audience" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {personas.map((persona) => (
+                      <SelectItem key={persona.id} value={persona.id.toString()}>
+                        {persona.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               {/* Instructions Field */}
@@ -308,9 +361,9 @@ export function GenerationWorkspace() {
                     <TooltipContent className="max-w-xs">
                       <p className="text-sm">Provide any instructions for your content:</p>
                       <ul className="list-disc list-inside mt-1 text-xs space-y-1">
-                        <li>Simple topic: "Write about AI ethics"</li>
+                        <li>Simple topic: &quot;Write about AI ethics&quot;</li>
                         <li>Draft to polish: Paste your rough draft</li>
-                        <li>Specific format: "Create a LinkedIn post about..."</li>
+                        <li>Specific format: &quot;Create a LinkedIn post about...&quot;</li>
                       </ul>
                     </TooltipContent>
                   </Tooltip>
@@ -324,41 +377,71 @@ export function GenerationWorkspace() {
                 />
               </div>
 
-              {/* Insight Selection */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label>Insights (Optional)</Label>
-                  <Badge variant="secondary" className="text-xs">
-                    {selectedInsights.length} selected
-                  </Badge>
-                </div>
-                <Button
-                  variant="outline"
-                  className="w-full justify-start"
-                  onClick={() => toast.info("Insight selection coming soon!")}
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add insights to include
-                </Button>
-                
-                {selectedInsights.length > 0 && (
-                  <div className="space-y-1">
-                    {selectedInsights.map((id) => (
-                      <div key={id} className="flex items-center gap-2 text-sm p-2 bg-muted rounded">
-                        <Lightbulb className="h-3 w-3 text-muted-foreground" />
-                        <span className="truncate flex-1">Insight {id}</span>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => setSelectedInsights(prev => prev.filter(i => i !== id))}
-                        >
-                          <X className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    ))}
+              {/* Insight Selection - Only show if a persona is selected and has insights */}
+              {selectedPersona && insights.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Label>Include Insight (Optional)</Label>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <Info className="h-4 w-4 text-muted-foreground" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p className="text-sm">
+                          Select an insight to include specific knowledge from your resources in the generated content.
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
                   </div>
-                )}
-              </div>
+                  
+                  {insightsLoading ? (
+                    <div className="flex items-center justify-center p-4">
+                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : (
+                    <RadioGroup value={selectedInsight} onValueChange={setSelectedInsight}>
+                      <div className="space-y-2 max-h-48 overflow-y-auto">
+                        {insights.map((insight) => (
+                          <div key={insight.id} className="flex items-start space-x-2">
+                            <RadioGroupItem value={insight.id.toString()} id={`insight-${insight.id}`} />
+                            <Label 
+                              htmlFor={`insight-${insight.id}`}
+                              className="flex-1 cursor-pointer"
+                            >
+                              <div className="p-2 hover:bg-muted/50 rounded transition-colors">
+                                <div className="flex items-start gap-2">
+                                  <Lightbulb className="h-4 w-4 text-muted-foreground mt-0.5" />
+                                  <div className="flex-1">
+                                    <p className="font-medium text-sm">{insight.title}</p>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                      From: {insight.resourceContent?.title}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                                      {insight.keyPoints}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            </Label>
+                          </div>
+                        ))}
+                      </div>
+                    </RadioGroup>
+                  )}
+                  
+                  {selectedInsight && (
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={() => setSelectedInsight("")}
+                      className="w-full"
+                    >
+                      <X className="h-3 w-3 mr-1" />
+                      Clear selection
+                    </Button>
+                  )}
+                </div>
+              )}
 
               {/* Generate Button */}
               <Button 

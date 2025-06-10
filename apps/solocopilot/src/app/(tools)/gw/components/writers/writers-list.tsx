@@ -69,10 +69,10 @@ function GhostwriterCard({ writer }: { writer: any }) {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
   const deleteGwMutationOptions = trpc.gw.ghostwriter.delete.mutationOptions({
-    onSuccess: () => {
-      toast.success("Ghostwriter deleted successfully!");
+    onSuccess: async () => {
+      toast.success(`${writer.name} was deleted successfully!`);
       // Invalidate the listAll query to refresh the data
-      queryClient.invalidateQueries({ queryKey: trpc.gw.listAll.queryKey() });
+      await queryClient.invalidateQueries({ queryKey: trpc.gw.listAll.queryKey() });
     },
     onError: (error) => {
       console.error("Failed to delete ghostwriter:", error);
@@ -90,7 +90,7 @@ function GhostwriterCard({ writer }: { writer: any }) {
 
   const handleDelete = async () => {
     await deleteGwMutation.mutateAsync({ id: writer.id });
-    toast.success(`${writer.name} was deleted successfully!`);
+   
   };
 
   const handleEdit = () => {

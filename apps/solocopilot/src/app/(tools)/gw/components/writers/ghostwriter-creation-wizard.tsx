@@ -25,6 +25,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 
 type Step = "basic" | "content" | "review" | "processing";
+type ProcessingStage = "creating" | "psychology" | "writing" | "complete";
 
 const steps = [
   { id: "basic", title: "Basic Info", icon: User },
@@ -38,30 +39,70 @@ export function GhostwriterCreationWizard() {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
   const [currentStep, setCurrentStep] = useState<Step>("basic");
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [processingStage, setProcessingStage] = useState<ProcessingStage>("creating");
+  const [ghostwriterId, setGhostwriterId] = useState<number | null>(null);
   
   // Form data
   const [ghostwriterName, setGhostwriterName] = useState("");
+  const [ghostwriterDescription, setGhostwriterDescription] = useState("");
   const [contentSamples, setContentSamples] = useState("");
 
-  // TRPC mutation
+  // TRPC mutations
   const createGhostwriterMutationOptions = trpc.gw.ghostwriter.create.mutationOptions({
-      onSuccess: (data) => {
+      onSuccess: async (data) => {
         console.log("Ghostwriter created successfully:", data);
-        // Invalidate the listAll query to refresh the data
-        queryClient.invalidateQueries({ queryKey: trpc.gw.listAll.queryKey() });
-        toast.success("Ghostwriter created successfully!");
-        router.push("/gw/writers");
+        if (data.ghostwriter?.id) {
+          setGhostwriterId(data.ghostwriter.id);
+          setProcessingStage("psychology");
+          // Immediately start creating psychology profile
+          await createPsyProfileMutation.mutateAsync({ gwid: data.ghostwriter.id });
+        }
       },
       onError: (error) => {
         console.error("Failed to create ghostwriter:", error);
         toast.error("Failed to create ghostwriter. Please try again.");
         setCurrentStep("review");
-        setIsProcessing(false);
       }
     });
 
   const createGhostwriterMutation = useMutation(createGhostwriterMutationOptions);
+
+  const createPsyProfileMutationOptions = trpc.gw.psyProfile.createForGhostwriter.mutationOptions({
+    onSuccess: async (data) => {
+      console.log("Psychology profile created successfully:", data);
+      setProcessingStage("writing");
+      // Start creating writing profile
+      if (ghostwriterId) {
+        await createWritingProfileMutation.mutateAsync({ gwid: ghostwriterId });
+      }
+    },
+    onError: (error) => {
+      console.error("Failed to create psychology profile:", error);
+      toast.error("Failed to create psychology profile. You can retry later from the writer's page.");
+
+    }
+  });
+
+  const createPsyProfileMutation = useMutation(createPsyProfileMutationOptions);
+
+  const createWritingProfileMutationOptions = trpc.gw.writingProfile.createForGhostwriter.mutationOptions({
+    onSuccess: async (data) => {
+      console.log("Writing profile created successfully:", data);
+      setProcessingStage("complete");
+      // Invalidate the listAll query to refresh the data
+      await queryClient.invalidateQueries({ queryKey: trpc.gw.listAll.queryKey() });
+      toast.success("Ghostwriter created successfully with all profiles!");
+      setTimeout(() => {
+        router.push("/gw/writers");
+      }, 1500);
+    },
+    onError: (error) => {
+      console.error("Failed to create writing profile:", error);
+      toast.error("Failed to create writing profile. You can retry later from the writer's page.");
+    }
+  });
+
+  const createWritingProfileMutation = useMutation(createWritingProfileMutationOptions);
 
   const currentStepIndex = steps.findIndex(step => step.id === currentStep);
   const progress = ((currentStepIndex + 1) / steps.length) * 100;
@@ -93,6 +134,10 @@ export function GhostwriterCreationWizard() {
         setCurrentStep("review");
         break;
       case "review":
+        if (!canCreate) {
+          toast.error("Please provide a name for your ghostwriter and add at least 10 content samples");
+          return;
+        }
         createGhostwriter();
         break;
     }
@@ -114,7 +159,7 @@ export function GhostwriterCreationWizard() {
 
   const createGhostwriter = async () => {
     setCurrentStep("processing");
-    setIsProcessing(true);
+    setProcessingStage("creating");
 
     try {
       console.log("Starting ghostwriter creation...");
@@ -122,19 +167,12 @@ export function GhostwriterCreationWizard() {
       const result = await createGhostwriterMutation.mutateAsync({
         name: ghostwriterName,
         content: contentSamples.trim(),
+        description: ghostwriterDescription || undefined,
       });
       console.log("Mutation result:", result);
     } catch (error) {
       // Error handling is done in the mutation's onError callback
       console.error("Error in createGhostwriter:", error);
-      
-      // If the error is an abort/timeout, show a specific message
-      if (error instanceof Error && error.name === 'AbortError') {
-        toast.error("The request took too long. The ghostwriter might still be processing in the background. Please check the writers list.");
-        setTimeout(() => {
-          router.push("/gw/writers");
-        }, 3000);
-      }
     }
   };
 
@@ -220,6 +258,20 @@ export function GhostwriterCreationWizard() {
                   />
                   <p className="text-sm text-muted-foreground">
                     Give your AI ghostwriter a descriptive name to help you identify its purpose.
+                  </p>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="ghostwriter-description">Description (Optional)</Label>
+                  <Textarea
+                    id="ghostwriter-description"
+                    placeholder="e.g., Professional content writer for tech blog posts and tutorials"
+                    value={ghostwriterDescription}
+                    onChange={(e) => setGhostwriterDescription(e.target.value)}
+                    className="min-h-[80px] resize-none"
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    Add a brief description to remember what this ghostwriter is for.
                   </p>
                 </div>
               </CardContent>
@@ -339,6 +391,13 @@ Continue adding more samples...`}
                     <p className="text-base mt-1">{ghostwriterName}</p>
                   </div>
 
+                  {ghostwriterDescription && (
+                    <div>
+                      <Label className="text-sm font-medium">Description</Label>
+                      <p className="text-base mt-1">{ghostwriterDescription}</p>
+                    </div>
+                  )}
+
                   <div>
                     <Label className="text-sm font-medium">Content Samples</Label>
                     <div className="mt-2 space-y-2">
@@ -384,45 +443,97 @@ Continue adding more samples...`}
             >
               <CardContent className="py-12 text-center space-y-6">
                 <motion.div
-                  animate={{ rotate: 360 }}
-                  transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                  animate={{ rotate: processingStage === "complete" ? 0 : 360 }}
+                  transition={{ duration: 2, repeat: processingStage === "complete" ? 0 : Infinity, ease: "linear" }}
                 >
-                  <Brain className="h-16 w-16 text-primary mx-auto" />
+                  {processingStage === "complete" ? (
+                    <Check className="h-16 w-16 text-green-500 mx-auto" />
+                  ) : (
+                    <Brain className="h-16 w-16 text-primary mx-auto" />
+                  )}
                 </motion.div>
                 
                 <div className="space-y-2">
-                  <h3 className="text-xl font-semibold">Creating Your Ghostwriter</h3>
+                  <h3 className="text-xl font-semibold">
+                    {processingStage === "complete" ? "Ghostwriter Created!" : "Creating Your Ghostwriter"}
+                  </h3>
                   <p className="text-muted-foreground">
-                    Our AI is analyzing your writing samples and creating personalized profiles...
+                    {processingStage === "complete" 
+                      ? "All profiles have been successfully generated." 
+                      : "Our AI is analyzing your writing samples and creating personalized profiles..."}
                   </p>
                 </div>
 
-                <div className="space-y-3 max-w-xs mx-auto">
-                  <div className="flex items-center gap-3 text-sm">
-                    <motion.div
-                      animate={{ scale: [1, 1.2, 1] }}
-                      transition={{ duration: 1, repeat: Infinity }}
-                      className="h-2 w-2 bg-primary rounded-full"
-                    />
-                    Analyzing writing patterns
+                <div className="space-y-3 max-w-sm mx-auto text-left">
+                  {/* Creating ghostwriter */}
+                  <div className="flex items-center gap-3">
+                    {processingStage === "creating" ? (
+                      <motion.div
+                        animate={{ scale: [1, 1.2, 1] }}
+                        transition={{ duration: 1, repeat: Infinity }}
+                        className="h-2 w-2 bg-primary rounded-full flex-shrink-0"
+                      />
+                    ) : (
+                      <Check className="h-5 w-5 text-green-500 flex-shrink-0" />
+                    )}
+                    <span className={`text-sm ${processingStage !== "creating" ? "text-muted-foreground" : ""}`}>
+                      Creating ghostwriter profile
+                    </span>
                   </div>
-                  <div className="flex items-center gap-3 text-sm">
-                    <motion.div
-                      animate={{ scale: [1, 1.2, 1] }}
-                      transition={{ duration: 1, repeat: Infinity, delay: 0.5 }}
-                      className="h-2 w-2 bg-primary rounded-full"
-                    />
-                    Creating psychology profile
+                  
+                  {/* Psychology profile */}
+                  <div className="flex items-center gap-3">
+                    {processingStage === "psychology" ? (
+                      <motion.div
+                        animate={{ scale: [1, 1.2, 1] }}
+                        transition={{ duration: 1, repeat: Infinity }}
+                        className="h-2 w-2 bg-primary rounded-full flex-shrink-0"
+                      />
+                    ) : processingStage === "creating" ? (
+                      <div className="h-2 w-2 bg-gray-300 rounded-full flex-shrink-0" />
+                    ) : (
+                      <Check className="h-5 w-5 text-green-500 flex-shrink-0" />
+                    )}
+                    <span className={`text-sm ${
+                      processingStage === "creating" ? "text-muted-foreground/50" : 
+                      processingStage !== "psychology" ? "text-muted-foreground" : ""
+                    }`}>
+                      Analyzing psychological patterns
+                    </span>
                   </div>
-                  <div className="flex items-center gap-3 text-sm">
-                    <motion.div
-                      animate={{ scale: [1, 1.2, 1] }}
-                      transition={{ duration: 1, repeat: Infinity, delay: 1 }}
-                      className="h-2 w-2 bg-primary rounded-full"
-                    />
-                    Generating writing style
+                  
+                  {/* Writing profile */}
+                  <div className="flex items-center gap-3">
+                    {processingStage === "writing" ? (
+                      <motion.div
+                        animate={{ scale: [1, 1.2, 1] }}
+                        transition={{ duration: 1, repeat: Infinity }}
+                        className="h-2 w-2 bg-primary rounded-full flex-shrink-0"
+                      />
+                    ) : processingStage === "complete" ? (
+                      <Check className="h-5 w-5 text-green-500 flex-shrink-0" />
+                    ) : (
+                      <div className="h-2 w-2 bg-gray-300 rounded-full flex-shrink-0" />
+                    )}
+                    <span className={`text-sm ${
+                      ["creating", "psychology"].includes(processingStage) ? "text-muted-foreground/50" : 
+                      processingStage !== "writing" ? "text-muted-foreground" : ""
+                    }`}>
+                      Analyzing writing style
+                    </span>
                   </div>
                 </div>
+
+                {processingStage === "complete" && (
+                  <motion.p
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.5 }}
+                    className="text-sm text-muted-foreground"
+                  >
+                    Redirecting to writers page...
+                  </motion.p>
+                )}
               </CardContent>
             </motion.div>
           )}

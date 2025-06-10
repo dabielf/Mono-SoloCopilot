@@ -44,6 +44,9 @@ importers:
       '@react-email/components':
         specifier: ^0.0.33
         version: 0.0.33(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+      '@repo/zod-types':
+        specifier: workspace:*
+        version: link:../../packages/zod-types
       '@tanstack/react-query':
         specifier: ^5.66.0
         version: 5.80.6(react@19.1.0)
@@ -180,9 +183,9 @@ importers:
       '@radix-ui/react-tooltip':
         specifier: ^1.2.7
         version: 1.2.7(@types/react-dom@19.1.1(@types/react@19.1.0))(@types/react@19.1.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
-      '@repo/hono-client':
+      '@repo/zod-types':
         specifier: workspace:*
-        version: link:../../packages/hono-client
+        version: link:../../packages/zod-types
       '@tanstack/react-query':
         specifier: ^5.80.6
         version: 5.80.6(react@19.1.0)
@@ -332,19 +335,6 @@ importers:
         specifier: ^8.33.0
         version: 8.33.0(eslint@9.28.0(jiti@2.4.2))(typescript@5.8.2)
 
-  packages/hono-client:
-    dependencies:
-      hono:
-        specifier: ^4.7.11
-        version: 4.7.11
-    devDependencies:
-      '@repo/typescript-config':
-        specifier: workspace:*
-        version: link:../typescript-config
-      typescript:
-        specifier: ^5
-        version: 5.8.3
-
   packages/typescript-config: {}
 
   packages/ui:
@@ -380,6 +370,19 @@ importers:
       typescript:
         specifier: 5.8.2
         version: 5.8.2
+
+  packages/zod-types:
+    dependencies:
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.56
+    devDependencies:
+      '@repo/typescript-config':
+        specifier: workspace:*
+        version: link:../typescript-config
+      typescript:
+        specifier: ^5.8.2
+        version: 5.8.3
 
 packages:
 

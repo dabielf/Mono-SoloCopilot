@@ -28,173 +28,33 @@ import { z } from 'zod';
 import { baseProcedure, createTRPCRouter } from '../init';
 import { createApiServerForTRPC } from '@/modules/api/ky';
 import { TRPCError } from '@trpc/server';
-
-// =====================================================
-// SCHEMAS & TYPES
-// =====================================================
-
-// Base response type that matches API
-const ApiResponse = <T>(dataSchema: z.ZodType<T>) => z.union([
-  z.object({
-    success: z.literal(true),
-    data: dataSchema,
-    message: z.string().optional(),
-    meta: z.object({
-      page: z.number().optional(),
-      limit: z.number().optional(),
-      total: z.number().optional(),
-      hasMore: z.boolean().optional(),
-    }).optional(),
-  }),
-  z.object({
-    success: z.literal(false),
-    error: z.object({
-      code: z.string(),
-      message: z.string(),
-      details: z.string().optional(),
-    }),
-  }),
-]);
-
-// Core entity schemas
-const GhostwriterSchema = z.object({
-  id: z.number(),
-  name: z.string(),
-  userId: z.number(),
-  psyProfileId: z.number().nullable(),
-  writingProfileId: z.number().nullable(),
-  createdAt: z.string(),
-  updatedAt: z.string(),
-});
-
-const PsyProfileSchema = z.object({
-  id: z.number(),
-  name: z.string(),
-  content: z.string(),
-  userId: z.number(),
-  ghostwriterId: z.number().nullable(),
-  createdAt: z.string(),
-  updatedAt: z.string(),
-});
-
-const WritingProfileSchema = z.object({
-  id: z.number(),
-  name: z.string(),
-  content: z.string(),
-  userId: z.number(),
-  ghostwriterId: z.number().nullable(),
-  createdAt: z.string(),
-  updatedAt: z.string(),
-});
-
-const PersonaSchema = z.object({
-  id: z.number(),
-  name: z.string(),
-  description: z.string().nullable(),
-  content: z.string(),
-  userId: z.number(),
-  createdAt: z.string(),
-  updatedAt: z.string(),
-});
-
-const OriginalContentSchema = z.object({
-  id: z.number(),
-  content: z.string(),
-  ghostwriterId: z.number(),
-  createdAt: z.string(),
-  updatedAt: z.string(),
-});
-
-const GeneratedContentSchema = z.object({
-  id: z.number(),
-  content: z.string(),
-  prompt: z.string(),
-  userId: z.number(),
-  ghostwriterId: z.number().nullable(),
-  writingProfileId: z.number(),
-  psyProfileId: z.number(),
-  personaId: z.number().nullable(),
-  userFeedBack: z.string().nullable(),
-  isTrainingData: z.boolean(),
-  createdAt: z.string(),
-  updatedAt: z.string(),
-});
-
-const ResourceContentSchema = z.object({
-  id: z.number(),
-  title: z.string(),
-  content: z.string(),
-  userId: z.number(),
-  createdAt: z.string(),
-  updatedAt: z.string(),
-});
-
-const InsightSchema = z.object({
-  id: z.number(),
-  title: z.string(),
-  keyPoints: z.string(),
-  rawContent: z.string(),
-  userId: z.number(),
-  personaId: z.number(),
-  resourceContentId: z.number(),
-  createdAt: z.string(),
-  updatedAt: z.string(),
-});
-
-// Input schemas
-const CreateGhostwriterInput = z.object({
-  name: z.string().min(1, "Name is required"),
-  content: z.string().min(1, "Content is required").describe("Content samples separated by '==='"),
-});
-
-const CreatePsyProfileInput = z.object({
-  name: z.string().min(1, "Name is required"),
-  content: z.string().min(1, "Content is required"),
-  gwId: z.string().optional(),
-});
-
-const GenerateContentInput = z.object({
-  psychologyProfileId: z.string().min(1, "Psychology profile ID is required"),
-  writingProfileId: z.string().min(1, "Writing profile ID is required"),
-  personaProfileId: z.string().optional(),
-  gwId: z.string().optional(),
-  topic: z.string().optional(),
-  insightId: z.string().optional(),
-}).refine(data => data.topic || data.insightId, {
-  message: "Either topic or insightId is required",
-});
-
-const SaveContentInput = z.object({
-  content: z.string().min(1, "Content is required"),
-  gwId: z.string().optional(),
-  psyProfileId: z.string().min(1, "Psychology profile ID is required"),
-  writingProfileId: z.string().min(1, "Writing profile ID is required"),
-  personaProfileId: z.string().optional(),
-  prompt: z.string().min(1, "Prompt is required"),
-  userFeedback: z.string().optional(),
-  isTrainingData: z.boolean().optional(),
-});
-
-const CreatePersonaInput = z.object({
-  name: z.string().min(1, "Name is required"),
-  description: z.string().optional(),
-  content: z.string().min(1, "Content is required"),
-});
-
-const ValueExtractorInput = z.object({
-  personaId: z.string().min(1, "Persona ID is required"),
-  resourceId: z.string().min(1, "Resource ID is required"),
-});
-
-const UpdateGeneratedContentInput = z.object({
-  userFeedBack: z.string().optional(),
-  isTrainingData: z.boolean().optional(),
-});
-
-const PaginationInput = z.object({
-  page: z.number().min(1).default(1),
-  limit: z.number().min(1).max(100).default(20),
-});
+import {
+  // Import all schemas from shared package
+  CreateGhostwriterInput,
+  CreatePsyProfileInput,
+  GenerateContentInput,
+  SaveContentInput,
+  CreatePersonaInput,
+  ValueExtractorInput,
+  UpdateGeneratedContentInput,
+  PaginationInput,
+  TextToResourceSchema,
+  type ApiResponseType,
+  type ListAllResponse,
+  type InsightWithRelations,
+  type PaginatedResponse,
+  type GenerateContentResponse,
+  type CreateGhostwriterResponse,
+  type PsyProfile,
+  type WritingProfile,
+  type Ghostwriter,
+  type OriginalContent,
+  type GeneratedContent,
+  type Persona,
+  type ResourceContent,
+  type ResourceContentList,
+  type Insight,
+} from '@repo/zod-types';
 
 // =====================================================
 // HELPER FUNCTIONS
@@ -208,9 +68,25 @@ function createFormData(data: Record<string, unknown>): FormData {
   
   Object.entries(data).forEach(([key, value]) => {
     if (value !== undefined && value !== null) {
+      // Check if it's a File or Blob
       if (value instanceof File || value instanceof Blob) {
         formData.append(key, value);
-      } else if (typeof value === 'boolean') {
+      } 
+      // Check if it looks like a serialized File object
+      else if (
+        typeof value === 'object' && 
+        'name' in value && 
+        'type' in value && 
+        'size' in value &&
+        'lastModified' in value
+      ) {
+        // It's likely a serialized File, create a Blob from it
+        // This shouldn't happen with proper File handling, but just in case
+        console.warn(`${key} appears to be a serialized File object, attempting to reconstruct`);
+        const blob = new Blob([value as any], { type: (value as any).type });
+        formData.append(key, blob, (value as any).name);
+      }
+      else if (typeof value === 'boolean') {
         formData.append(key, value.toString());
       } else {
         formData.append(key, String(value));
@@ -221,44 +97,18 @@ function createFormData(data: Record<string, unknown>): FormData {
   return formData;
 }
 
-type ApiResponseSuccessType<T> = {
-  success: true;
-  data: T;
-  message?: string;
-  meta?: {
-    page?: number;
-    limit?: number;
-    total?: number;
-    hasMore?: boolean;
-  };
-}
-
-type ApiResponseErrorType = {
-  success: false;
-  error: {
-    code: string;
-    message: string;
-    details?: string;
-  };
-}
-
-// Type for API responses
-type ApiResponseType<T> = ApiResponseSuccessType<T> | ApiResponseErrorType;
-
-
 /**
  * Handle API responses and throw TRPC errors for failures
  */
-async function handleApiResponse<T>(response: Response, schema?: z.ZodType<ApiResponseType<T>>): Promise<T> {
-  const data = await response.json() as unknown;
+async function handleApiResponse<T>(response: Response): Promise<T> {
+  const data = await response.json() as ApiResponseType<T>;
   
   if (response.status !== 200) {
-    const errorData = data as { error?: { message?: string } };
-    if (errorData.error) {
+    if ('error' in data && data.error) {
       throw new TRPCError({
         code: 'BAD_REQUEST',
-        message: errorData.error.message || 'API request failed',
-        cause: errorData.error,
+        message: data.error.message || 'API request failed',
+        cause: data.error,
       });
     }
     throw new TRPCError({
@@ -267,36 +117,15 @@ async function handleApiResponse<T>(response: Response, schema?: z.ZodType<ApiRe
     });
   }
   
-  if (schema) {
-    const result = schema.safeParse(data);
-    if (!result.success) {
-      throw new TRPCError({
-        code: 'INTERNAL_SERVER_ERROR',
-        message: 'Invalid response format from API',
-        cause: result.error,
-      });
-    }
-    
-    if (!result.data.success) {
-      throw new TRPCError({
-        code: 'BAD_REQUEST',
-        message: result.data.error.message,
-        cause: result.data.error,
-      });
-    }
-    
-    return result.data.data;
+  if (!data.success) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: data.error.message,
+      cause: data.error,
+    });
   }
-
-  if ((data as ApiResponseType<T>).success) {
-    return (data as ApiResponseSuccessType<T>).data;
-  }
-
-  throw new TRPCError({
-    code: 'INTERNAL_SERVER_ERROR',
-    message: 'Invalid response format from API',
-    cause: data,
-  });
+  
+  return data.data;
 }
 
 // =====================================================
@@ -313,16 +142,10 @@ export const gwRouter = createTRPCRouter({
    * Get all user data (ghostwriters, profiles, personas, resources)
    */
   listAll: baseProcedure
-    .query(async () => {
+    .query(async (): Promise<ListAllResponse> => {
       const apiClient = createApiServerForTRPC();
       const response = await apiClient.get('gw');
-      return handleApiResponse(response, ApiResponse(z.array(z.object({
-        ghostwriters: z.array(GhostwriterSchema.pick({ id: true, name: true, psyProfileId: true, writingProfileId: true })),
-        psyProfiles: z.array(PsyProfileSchema.pick({ id: true, name: true })),
-        writingProfiles: z.array(WritingProfileSchema.pick({ id: true, name: true })),
-        personas: z.array(PersonaSchema.pick({ id: true, name: true, description: true })),
-        resourceContents: z.array(ResourceContentSchema.pick({ id: true, title: true })),
-      }))));
+      return handleApiResponse<ListAllResponse>(response);
     }),
 
   // =====================================================
@@ -335,16 +158,11 @@ export const gwRouter = createTRPCRouter({
      */
     create: baseProcedure
       .input(CreateGhostwriterInput)
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input }): Promise<CreateGhostwriterResponse> => {
         const apiClient = createApiServerForTRPC();
         const formData = createFormData(input);
         const response = await apiClient.post('gw', { body: formData });
-        return handleApiResponse(response, ApiResponse(z.object({
-          ghostwriter: GhostwriterSchema,
-          psyProfile: PsyProfileSchema,
-          writingProfile: WritingProfileSchema,
-          originalContents: z.array(OriginalContentSchema),
-        })));
+        return handleApiResponse<CreateGhostwriterResponse>(response);
       }),
 
     /**
@@ -352,12 +170,10 @@ export const gwRouter = createTRPCRouter({
      */
     get: baseProcedure
       .input(z.object({ id: z.number() }))
-      .query(async ({ input }) => {
+      .query(async ({ input }): Promise<Ghostwriter> => {
         const apiClient = createApiServerForTRPC();
         const response = await apiClient.get(`gw/ghostwriter/${input.id}`);
-        return handleApiResponse(response, ApiResponse(GhostwriterSchema.extend({
-          originalContents: z.array(OriginalContentSchema),
-        })));
+        return handleApiResponse<Ghostwriter>(response);
       }),
 
     /**
@@ -368,12 +184,12 @@ export const gwRouter = createTRPCRouter({
         id: z.number(), 
         name: z.string().min(1, "Name is required") 
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input }): Promise<Ghostwriter> => {
         const apiClient = createApiServerForTRPC();
         const { id, ...updateData } = input;
         const formData = createFormData(updateData);
         const response = await apiClient.patch(`gw/ghostwriter/${id}`, { body: formData });
-        return handleApiResponse(response, ApiResponse(GhostwriterSchema));
+        return handleApiResponse<Ghostwriter>(response);
       }),
 
     /**
@@ -381,10 +197,10 @@ export const gwRouter = createTRPCRouter({
      */
     delete: baseProcedure
       .input(z.object({ id: z.number() }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input }): Promise<{ success: boolean; message: string }> => {
         const apiClient = createApiServerForTRPC();
         const response = await apiClient.delete(`gw/ghostwriter/${input.id}`);
-        return handleApiResponse(response);
+        return handleApiResponse<{ success: boolean; message: string }>(response);
       }),
   }),
 
@@ -398,10 +214,10 @@ export const gwRouter = createTRPCRouter({
      */
     get: baseProcedure
       .input(z.object({ gwid: z.number() }))
-      .query(async ({ input }) => {
+      .query(async ({ input }): Promise<OriginalContent[]> => {
         const apiClient = createApiServerForTRPC();
         const response = await apiClient.get(`gw/original-content/${input.gwid}`);
-        return handleApiResponse(response, ApiResponse(z.array(OriginalContentSchema)));
+        return handleApiResponse<OriginalContent[]>(response);
       }),
 
     /**
@@ -412,12 +228,12 @@ export const gwRouter = createTRPCRouter({
         gwid: z.number(), 
         content: z.string().min(1, "Content is required") 
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input }): Promise<{ success: boolean }> => {
         const apiClient = createApiServerForTRPC();
         const { gwid, ...contentData } = input;
         const formData = createFormData(contentData);
         const response = await apiClient.post(`gw/original-content/${gwid}`, { body: formData });
-        return handleApiResponse(response, ApiResponse(z.object({ success: z.boolean() })));
+        return handleApiResponse<{ success: boolean }>(response);
       }),
   }),
 
@@ -431,10 +247,10 @@ export const gwRouter = createTRPCRouter({
      */
     get: baseProcedure
       .input(z.object({ gwid: z.number() }))
-      .query(async ({ input }) => {
+      .query(async ({ input }): Promise<GeneratedContent[]> => {
         const apiClient = createApiServerForTRPC();
         const response = await apiClient.get(`gw/generated-content/${input.gwid}`);
-        return handleApiResponse(response, ApiResponse(z.array(GeneratedContentSchema)));
+        return handleApiResponse<GeneratedContent[]>(response);
       }),
 
     /**
@@ -442,12 +258,12 @@ export const gwRouter = createTRPCRouter({
      */
     update: baseProcedure
       .input(z.object({ id: z.number() }).merge(UpdateGeneratedContentInput))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input }): Promise<GeneratedContent> => {
         const apiClient = createApiServerForTRPC();
         const { id, ...updateData } = input;
         const formData = createFormData(updateData);
         const response = await apiClient.patch(`gw/generated-content/${id}`, { body: formData });
-        return handleApiResponse(response, ApiResponse(GeneratedContentSchema));
+        return handleApiResponse<GeneratedContent>(response);
       }),
 
     /**
@@ -455,10 +271,10 @@ export const gwRouter = createTRPCRouter({
      */
     delete: baseProcedure
       .input(z.object({ id: z.number() }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input }): Promise<{ success: boolean; message: string }> => {
         const apiClient = createApiServerForTRPC();
         const response = await apiClient.delete(`gw/generated-content/${input.id}`);
-        return handleApiResponse(response, ApiResponse(z.object({ success: z.boolean(), message: z.string() })));
+        return handleApiResponse<{ success: boolean; message: string }>(response);
       }),
   }),
 
@@ -472,11 +288,11 @@ export const gwRouter = createTRPCRouter({
      */
     create: baseProcedure
       .input(CreatePsyProfileInput)
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input }): Promise<PsyProfile[]> => {
         const apiClient = createApiServerForTRPC();
         const formData = createFormData(input);
         const response = await apiClient.post('gw/psyprofile', { body: formData });
-        return handleApiResponse(response, ApiResponse(z.array(PsyProfileSchema)));
+        return handleApiResponse<PsyProfile[]>(response);
       }),
 
     /**
@@ -484,10 +300,10 @@ export const gwRouter = createTRPCRouter({
      */
     get: baseProcedure
       .input(z.object({ id: z.number() }))
-      .query(async ({ input }) => {
+      .query(async ({ input }): Promise<PsyProfile> => {
         const apiClient = createApiServerForTRPC();
         const response = await apiClient.get(`gw/psyprofile/${input.id}`);
-        return handleApiResponse(response, ApiResponse(PsyProfileSchema));
+        return handleApiResponse<PsyProfile>(response);
       }),
 
     /**
@@ -499,12 +315,23 @@ export const gwRouter = createTRPCRouter({
         name: z.string().min(1).optional(),
         content: z.string().min(1).optional(),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input }): Promise<PsyProfile> => {
         const apiClient = createApiServerForTRPC();
         const { id, ...updateData } = input;
         const formData = createFormData(updateData);
         const response = await apiClient.patch(`gw/psyprofile/${id}`, { body: formData });
-        return handleApiResponse(response, ApiResponse(PsyProfileSchema));
+        return handleApiResponse<PsyProfile>(response);
+      }),
+
+    /**
+     * Create psychology profile for a ghostwriter
+     */
+    createForGhostwriter: baseProcedure
+      .input(z.object({ gwid: z.number() }))
+      .mutation(async ({ input }): Promise<PsyProfile> => {
+        const apiClient = createApiServerForTRPC();
+        const response = await apiClient.post(`gw/psyprofile/create/${input.gwid}`);
+        return handleApiResponse<PsyProfile>(response);
       }),
 
     /**
@@ -512,10 +339,10 @@ export const gwRouter = createTRPCRouter({
      */
     train: baseProcedure
       .input(z.object({ gwid: z.number() }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input }): Promise<{ improvedPsyProfile: string }> => {
         const apiClient = createApiServerForTRPC();
         const response = await apiClient.post(`gw/psyprofile/train/${input.gwid}`);
-        return handleApiResponse(response, ApiResponse(z.object({ improvedPsyProfile: z.string() })));  
+        return handleApiResponse<{ improvedPsyProfile: string }>(response);  
       }),
   }),
 
@@ -529,10 +356,10 @@ export const gwRouter = createTRPCRouter({
      */
     get: baseProcedure
       .input(z.object({ id: z.number() }))
-      .query(async ({ input }) => {
+      .query(async ({ input }): Promise<WritingProfile> => {
         const apiClient = createApiServerForTRPC();
         const response = await apiClient.get(`gw/writingprofile/${input.id}`);
-        return handleApiResponse(response, ApiResponse(WritingProfileSchema));
+        return handleApiResponse<WritingProfile>(response);
       }),
 
     /**
@@ -544,12 +371,23 @@ export const gwRouter = createTRPCRouter({
         name: z.string().min(1).optional(),
         content: z.string().min(1).optional(),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input }): Promise<WritingProfile> => {
         const apiClient = createApiServerForTRPC();
         const { id, ...updateData } = input;
         const formData = createFormData(updateData);
         const response = await apiClient.patch(`gw/writingprofile/${id}`, { body: formData });
-        return handleApiResponse(response, ApiResponse(WritingProfileSchema));
+        return handleApiResponse<WritingProfile>(response);
+      }),
+
+    /**
+     * Create writing profile for a ghostwriter
+     */
+    createForGhostwriter: baseProcedure
+      .input(z.object({ gwid: z.number() }))
+      .mutation(async ({ input }): Promise<WritingProfile> => {
+        const apiClient = createApiServerForTRPC();
+        const response = await apiClient.post(`gw/writingprofile/create/${input.gwid}`);
+        return handleApiResponse<WritingProfile>(response);
       }),
 
     /**
@@ -557,10 +395,10 @@ export const gwRouter = createTRPCRouter({
      */
     train: baseProcedure
       .input(z.object({ gwid: z.number() }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input }): Promise<{ improvedWritingProfile: string }> => {
         const apiClient = createApiServerForTRPC();
         const response = await apiClient.post(`gw/writingprofile/train/${input.gwid}`);
-        return handleApiResponse(response, ApiResponse(z.object({ improvedWritingProfile: z.string() })));
+        return handleApiResponse<{ improvedWritingProfile: string }>(response);
       }),
   }),
 
@@ -574,18 +412,11 @@ export const gwRouter = createTRPCRouter({
      */
     generate: baseProcedure
       .input(GenerateContentInput)
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input }): Promise<GenerateContentResponse> => {
         const apiClient = createApiServerForTRPC();
         const formData = createFormData(input);
         const response = await apiClient.post('gw/generate', { body: formData });
-        return handleApiResponse(response, ApiResponse(z.object({
-          content: z.string(),
-          writingProfileId: z.string(),
-          psychologyProfileId: z.string(),
-          topic: z.string().optional(),
-          gwId: z.string().optional(),
-          personaProfileId: z.string().optional(),
-        })));
+        return handleApiResponse<GenerateContentResponse>(response);
       }),
 
     /**
@@ -593,14 +424,14 @@ export const gwRouter = createTRPCRouter({
      */
     save: baseProcedure
       .input(SaveContentInput)
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input }): Promise<{ success: boolean }> => {
         const apiClient = createApiServerForTRPC();
         const formData = createFormData({
           ...input,
           isTrainingData: input.isTrainingData ? 'true' : undefined,
         });
         const response = await apiClient.post('gw/save-content', { body: formData });
-        return handleApiResponse(response, ApiResponse(z.object({ success: z.boolean() })));
+        return handleApiResponse<{ success: boolean }>(response);
       }),
   }),
 
@@ -614,11 +445,11 @@ export const gwRouter = createTRPCRouter({
      */
     create: baseProcedure
       .input(CreatePersonaInput)
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input }): Promise<Persona[]> => {
         const apiClient = createApiServerForTRPC();
         const formData = createFormData(input);
         const response = await apiClient.post('gw/persona', { body: formData });
-        return handleApiResponse(response, ApiResponse(z.array(PersonaSchema)));
+        return handleApiResponse<Persona[]>(response);
       }),
 
     /**
@@ -626,11 +457,11 @@ export const gwRouter = createTRPCRouter({
      */
     extract: baseProcedure
       .input(z.object({ gwId: z.string().min(1, "Ghostwriter ID is required") }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input }): Promise<Persona[]> => {
         const apiClient = createApiServerForTRPC();
         const formData = createFormData(input);
         const response = await apiClient.post('gw/persona-extractor', { body: formData });
-        return handleApiResponse(response, ApiResponse(z.array(PersonaSchema)));
+        return handleApiResponse<Persona[]>(response);
       }),
 
     /**
@@ -638,10 +469,10 @@ export const gwRouter = createTRPCRouter({
      */
     get: baseProcedure
       .input(z.object({ id: z.number() }))
-      .query(async ({ input }) => {
+      .query(async ({ input }): Promise<Persona> => {
         const apiClient = createApiServerForTRPC();
         const response = await apiClient.get(`gw/persona/${input.id}`);
-        return handleApiResponse(response, ApiResponse(PersonaSchema));
+        return handleApiResponse<Persona>(response);
       }),
 
     /**
@@ -654,12 +485,12 @@ export const gwRouter = createTRPCRouter({
         description: z.string().optional(),
         content: z.string().min(1).optional(),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input }): Promise<Persona> => {
         const apiClient = createApiServerForTRPC();
         const { id, ...updateData } = input;
         const formData = createFormData(updateData);
         const response = await apiClient.patch(`gw/persona/${id}`, { body: formData });
-        return handleApiResponse(response, ApiResponse(PersonaSchema));
+        return handleApiResponse<Persona>(response);
       }),
 
     /**
@@ -667,10 +498,10 @@ export const gwRouter = createTRPCRouter({
      */
     delete: baseProcedure
       .input(z.object({ id: z.number() }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input }): Promise<{ success: boolean; message: string }> => {
         const apiClient = createApiServerForTRPC();
         const response = await apiClient.delete(`gw/persona/${input.id}`);
-        return handleApiResponse(response, ApiResponse(z.object({ message: z.string() })));
+        return handleApiResponse<{ success: boolean; message: string }>(response);
       }),
   }),
 
@@ -684,16 +515,16 @@ export const gwRouter = createTRPCRouter({
      */
     uploadPdf: baseProcedure
       .input(z.object({
-        pdfFile: z.instanceof(File, { message: "Must be a File object" }),
+        pdfFile: z.any(), // Accept any type, will validate as File on client
         title: z.string().min(1, "Title is required"),
         maxPages: z.number().positive().optional(),
         encoding: z.enum(['utf-8', 'utf-16', 'ascii']).default('utf-8'),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input }): Promise<ResourceContent> => {
         const apiClient = createApiServerForTRPC();
         const formData = createFormData(input);
         const response = await apiClient.post('gw/pdf-resource', { body: formData });
-        return handleApiResponse(response, ApiResponse(ResourceContentSchema));
+        return handleApiResponse<ResourceContent>(response);
       }),
 
     /**
@@ -701,16 +532,28 @@ export const gwRouter = createTRPCRouter({
      */
     uploadEpub: baseProcedure
       .input(z.object({
-        epubFile: z.instanceof(File, { message: "Must be a File object" }),
+        epubFile: z.any(), // Accept any type, will validate as File on client
         title: z.string().min(1, "Title is required"),
         includeMetadata: z.boolean().default(false),
         chapterSeparator: z.string().default('\n\n===\n\n'),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input }): Promise<ResourceContent> => {
         const apiClient = createApiServerForTRPC();
         const formData = createFormData(input);
         const response = await apiClient.post('gw/epub-resource', { body: formData });
-        return handleApiResponse(response, ApiResponse(ResourceContentSchema));
+        return handleApiResponse<ResourceContent>(response);
+      }),
+
+    /**
+     * Upload text resource
+     */
+    uploadText: baseProcedure
+      .input(TextToResourceSchema)
+      .mutation(async ({ input }): Promise<ResourceContent> => {
+        const apiClient = createApiServerForTRPC();
+        const formData = createFormData(input);
+        const response = await apiClient.post('gw/text-resource', { body: formData });
+        return handleApiResponse<ResourceContent>(response);
       }),
 
     /**
@@ -718,14 +561,38 @@ export const gwRouter = createTRPCRouter({
      */
     list: baseProcedure
       .input(PaginationInput)
-      .query(async ({ input }) => {
+      .query(async ({ input }): Promise<PaginatedResponse<ResourceContentList>> => {
         const apiClient = createApiServerForTRPC();
         const searchParams = new URLSearchParams({
           page: input.page.toString(),
           limit: input.limit.toString(),
         });
         const response = await apiClient.get(`gw/resources?${searchParams}`);
-        return handleApiResponse(response, ApiResponse(z.array(ResourceContentSchema)));
+        const apiData = await response.json() as ApiResponseType<ResourceContentList[]>;
+        
+        if (!apiData.success) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: apiData.error.message,
+            cause: apiData.error,
+          });
+        }
+        
+        return {
+          data: apiData.data,
+          meta: apiData.meta
+        } as PaginatedResponse<ResourceContentList>;
+      }),
+
+    /**
+     * Get single resource by ID
+     */
+    get: baseProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ input }): Promise<ResourceContent> => {
+        const apiClient = createApiServerForTRPC();
+        const response = await apiClient.get(`gw/resource/${input.id}`);
+        return handleApiResponse<ResourceContent>(response);
       }),
 
     /**
@@ -733,10 +600,10 @@ export const gwRouter = createTRPCRouter({
      */
     delete: baseProcedure
       .input(z.object({ id: z.number() }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input }): Promise<{ success: boolean; message: string }> => {
         const apiClient = createApiServerForTRPC();
         const response = await apiClient.delete(`gw/resource/${input.id}`);
-        return handleApiResponse(response, ApiResponse(z.object({ message: z.string() })));
+        return handleApiResponse<{ success: boolean; message: string }>(response);
       }),
   }),
 
@@ -750,50 +617,45 @@ export const gwRouter = createTRPCRouter({
      */
     extract: baseProcedure
       .input(ValueExtractorInput)
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input }): Promise<Insight[]> => {
         const apiClient = createApiServerForTRPC();
         const formData = createFormData(input);
         const response = await apiClient.post('gw/value-extractor', { body: formData });
-        return handleApiResponse(response, ApiResponse(z.array(InsightSchema)));
+        return handleApiResponse<Insight[]>(response);
       }),
 
     /**
      * Get all insights with pagination
      */
     list: baseProcedure
-      .input(PaginationInput)
-      .query(async ({ input }) => {
+      .input(PaginationInput.extend({
+        personaId: z.string().optional(),
+      }))
+      .query(async ({ input }): Promise<PaginatedResponse<InsightWithRelations>> => {
         const apiClient = createApiServerForTRPC();
         const searchParams = new URLSearchParams({
           page: input.page.toString(),
           limit: input.limit.toString(),
         });
+        if (input.personaId) {
+          searchParams.append('personaId', input.personaId);
+        }
         const response = await apiClient.get(`gw/insights?${searchParams}`);
-        return handleApiResponse(response, ApiResponse(z.array(InsightSchema.extend({
-          persona: z.object({ id: z.number(), name: z.string() }),
-          resourceContent: z.object({ id: z.number(), title: z.string() }),
-        }))));
+        const apiData = await response.json() as ApiResponseType<InsightWithRelations[]>;
+        
+        if (!apiData.success) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: apiData.error.message,
+            cause: apiData.error,
+          });
+        }
+        
+        return {
+          data: apiData.data,
+          meta: apiData.meta
+        } as PaginatedResponse<InsightWithRelations>;
       }),
   }),
 });
 
-// =====================================================
-// TYPE EXPORTS FOR FRONTEND
-// =====================================================
-
-// Export input and output types for use in components
-export type CreateGhostwriterData = z.infer<typeof CreateGhostwriterInput>;
-export type GenerateContentData = z.infer<typeof GenerateContentInput>;
-export type SaveContentData = z.infer<typeof SaveContentInput>;
-export type CreatePersonaData = z.infer<typeof CreatePersonaInput>;
-export type UpdateGeneratedContentData = z.infer<typeof UpdateGeneratedContentInput>;
-
-// Export entity types
-export type Ghostwriter = z.infer<typeof GhostwriterSchema>;
-export type PsyProfile = z.infer<typeof PsyProfileSchema>;
-export type WritingProfile = z.infer<typeof WritingProfileSchema>;
-export type Persona = z.infer<typeof PersonaSchema>;
-export type OriginalContent = z.infer<typeof OriginalContentSchema>;
-export type GeneratedContent = z.infer<typeof GeneratedContentSchema>;
-export type ResourceContent = z.infer<typeof ResourceContentSchema>;
-export type Insight = z.infer<typeof InsightSchema>;

@@ -13,10 +13,10 @@ export default async function GWDashboard() {
     <div className="p-6 space-y-6">
       {/* Welcome Section */}
       <div>
-        <h1 className="text-3xl font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
+        <h1 className="text-2xl font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
           Welcome to Ghostwriter
         </h1>
-        <p className="text-muted-foreground mt-2">
+        <p className="text-muted-foreground">
           Transform your writing samples into AI that writes exactly like you, for any audience.
         </p>
       </div>
