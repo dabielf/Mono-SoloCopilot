@@ -27,6 +27,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import type { 
   InsightWithRelations, 
   GhostwriterList, 
@@ -46,17 +47,20 @@ export function GenerationWorkspace() {
   const searchParams = useSearchParams();
 
   const writerId = searchParams.get("writer");
+  const insightId = searchParams.get("insight");
+  const personaId = searchParams.get("persona");
   
   // Generation state
   const [mode, setMode] = useState<GenerationMode>("writer");
   const [selectedWriter, setSelectedWriter] = useState<string>(writerId || "");
   const [selectedPsyProfile, setSelectedPsyProfile] = useState<string>("");
   const [selectedWritingProfile, setSelectedWritingProfile] = useState<string>("");
-  const [selectedPersona, setSelectedPersona] = useState<string>("");
+  const [selectedPersona, setSelectedPersona] = useState<string>(personaId || "");
   const [instructions, setInstructions] = useState("");
-  const [selectedInsight, setSelectedInsight] = useState<string>("");
+  const [selectedInsight, setSelectedInsight] = useState<string>(insightId || "");
   const [generatedContent, setGeneratedContent] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
+  const [showInsightDialog, setShowInsightDialog] = useState(false);
 
   const data = overview ? overview[0] : undefined;
   const ghostwriters: GhostwriterList[] = data?.ghostwriters || [];
@@ -119,7 +123,7 @@ export function GenerationWorkspace() {
       return;
     }
 
-    if (!instructions.trim()) {
+    if (!instructions.trim() && !selectedInsight) {
       toast.error("Please provide instructions for content generation");
       return;
     }
@@ -144,7 +148,7 @@ export function GenerationWorkspace() {
           writingProfileId: writer.writingProfileId.toString(),
           gwId: selectedWriter,
           personaProfileId: selectedPersona || undefined,
-          topic: instructions,
+          topic: instructions.trim() || undefined,
           insightId: selectedInsight || undefined
         };
       } else {
@@ -152,7 +156,7 @@ export function GenerationWorkspace() {
           psychologyProfileId: selectedPsyProfile,
           writingProfileId: selectedWritingProfile,
           personaProfileId: selectedPersona || undefined,
-          topic: instructions,
+          topic: instructions.trim() || undefined,
           insightId: selectedInsight || undefined
         };
       }
@@ -217,13 +221,17 @@ export function GenerationWorkspace() {
         writingProfileId = selectedWritingProfile;
       }
       
+      // Use instructions if provided, otherwise use the selected insight title as prompt
+      const selectedInsightData = insights.find(i => i.id.toString() === selectedInsight);
+      const promptText = selectedInsightData?.title || "Generated content";
+
       const payload = {
         content: generatedContent,
         gwId: mode === "writer" ? selectedWriter : undefined,
         psyProfileId,
         writingProfileId,
         personaProfileId: selectedPersona || undefined,
-        prompt: instructions,
+        prompt: instructions || promptText,
         userFeedback: undefined, // Can be added later
         isTrainingData: false, // Default to false, user can mark later
       };
@@ -242,13 +250,16 @@ export function GenerationWorkspace() {
         <div className="w-96 border-r bg-muted/10">
           <Card className="h-full rounded-none border-0">
             <CardHeader className="border-b">
-              <CardTitle className="text-lg">Content Generation</CardTitle>
+              <div className="flex items-center justify-between h-[60px]">
+                <CardTitle className="text-lg">Content Generation</CardTitle>
+                <div className="w-[140px]"></div> {/* Spacer to match right panel button width */}
+              </div>
             </CardHeader>
             
             <CardContent className="p-6 space-y-6 overflow-auto">
               {/* Mode Switcher */}
               <div>
-                <Label className="text-sm font-medium mb-3 block">Generation Mode</Label>
+                <Label className="text-sm font-medium -mt-6 mb-3 block">Generation Mode</Label>
                 <Tabs value={mode} onValueChange={(value) => setMode(value as GenerationMode)}>
                   <TabsList className="grid w-full grid-cols-2">
                     <TabsTrigger value="writer" className="flex items-center gap-2">
@@ -377,9 +388,9 @@ export function GenerationWorkspace() {
                 />
               </div>
 
-              {/* Insight Selection - Only show if a persona is selected and has insights */}
-              {selectedPersona && insights.length > 0 && (
-                <div className="space-y-2">
+              {/* Insight Selection - Show button when persona is selected */}
+              {selectedPersona && (
+                <div className="space-y-3">
                   <div className="flex items-center gap-2">
                     <Label>Include Insight (Optional)</Label>
                     <Tooltip>
@@ -394,51 +405,125 @@ export function GenerationWorkspace() {
                     </Tooltip>
                   </div>
                   
-                  {insightsLoading ? (
-                    <div className="flex items-center justify-center p-4">
-                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                    </div>
-                  ) : (
-                    <RadioGroup value={selectedInsight} onValueChange={setSelectedInsight}>
-                      <div className="space-y-2 max-h-48 overflow-y-auto">
-                        {insights.map((insight) => (
-                          <div key={insight.id} className="flex items-start space-x-2">
-                            <RadioGroupItem value={insight.id.toString()} id={`insight-${insight.id}`} />
-                            <Label 
-                              htmlFor={`insight-${insight.id}`}
-                              className="flex-1 cursor-pointer"
-                            >
-                              <div className="p-2 hover:bg-muted/50 rounded transition-colors">
-                                <div className="flex items-start gap-2">
-                                  <Lightbulb className="h-4 w-4 text-muted-foreground mt-0.5" />
-                                  <div className="flex-1">
-                                    <p className="font-medium text-sm">{insight.title}</p>
-                                    <p className="text-xs text-muted-foreground mt-1">
-                                      From: {insight.resourceContent?.title}
-                                    </p>
-                                    <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                                      {insight.keyPoints}
-                                    </p>
-                                  </div>
+                  {!selectedInsight ? (
+                    <Dialog open={showInsightDialog} onOpenChange={setShowInsightDialog}>
+                      <DialogTrigger asChild>
+                        <Button variant="outline" className="w-full justify-start" disabled={insightsLoading || insights.length === 0}>
+                          {insightsLoading ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                              Loading insights...
+                            </>
+                          ) : insights.length === 0 ? (
+                            <>
+                              <Lightbulb className="h-4 w-4 mr-2" />
+                              No insights available
+                            </>
+                          ) : (
+                            <>
+                              <Lightbulb className="h-4 w-4 mr-2" />
+                              Select an insight
+                            </>
+                          )}
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+                        <DialogHeader>
+                          <DialogTitle>Select an Insight</DialogTitle>
+                          <DialogDescription>
+                            Choose an insight to include in your content generation
+                          </DialogDescription>
+                        </DialogHeader>
+                        <div className="flex-1 overflow-y-auto">
+                          <RadioGroup value={selectedInsight} onValueChange={(value) => {
+                            setSelectedInsight(value);
+                            setShowInsightDialog(false);
+                          }}>
+                            <div className="space-y-3">
+                              {insights.map((insight) => (
+                                <div key={insight.id} className="flex items-start space-x-3">
+                                  <RadioGroupItem value={insight.id.toString()} id={`dialog-insight-${insight.id}`} className="mt-1" />
+                                  <Label 
+                                    htmlFor={`dialog-insight-${insight.id}`}
+                                    className="flex-1 cursor-pointer"
+                                  >
+                                    <div className="p-3 hover:bg-muted/50 rounded-lg transition-colors border">
+                                      <div className="flex items-start gap-2">
+                                        <Lightbulb className="h-4 w-4 text-muted-foreground mt-0.5" />
+                                        <div className="flex-1">
+                                          <p className="font-medium text-sm">{insight.title}</p>
+                                          <p className="text-xs text-muted-foreground mt-1">
+                                            From: {insight.resourceContent?.title}
+                                          </p>
+                                          <div className="mt-2">
+                                            <p className="text-xs font-medium text-muted-foreground mb-1">Key points:</p>
+                                            <ul className="text-xs text-muted-foreground space-y-1">
+                                              {insight.keyPoints.slice(0, 3).map((point, index) => (
+                                                <li key={index} className="flex items-start gap-1">
+                                                  <span className="text-primary">•</span>
+                                                  <span>{point}</span>
+                                                </li>
+                                              ))}
+                                              {insight.keyPoints.length > 3 && (
+                                                <li className="text-muted-foreground/70">
+                                                  +{insight.keyPoints.length - 3} more points
+                                                </li>
+                                              )}
+                                            </ul>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </Label>
                                 </div>
-                              </div>
-                            </Label>
+                              ))}
+                            </div>
+                          </RadioGroup>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                  ) : (
+                    <div className="space-y-3">
+                      <Button 
+                        variant="outline" 
+                        className="w-full justify-start"
+                        onClick={() => setSelectedInsight("")}
+                      >
+                        <X className="h-4 w-4 text-destructive mr-2" />
+                        Clear insight
+                      </Button>
+                      
+                      {/* Show selected insight details */}
+                      {(() => {
+                        const selectedInsightData = insights.find(i => i.id.toString() === selectedInsight);
+                        if (!selectedInsightData) return null;
+                        
+                        return (
+                          <div className="p-4 bg-muted/30 rounded-lg border">
+                            <div className="flex items-center gap-2 mb-3">
+                              <Lightbulb className="h-4 w-4 text-primary" />
+                              <h4 className="font-medium text-sm">{selectedInsightData.title}</h4>
+                            </div>
+                            <p className="text-xs text-muted-foreground mb-3">
+                              From: {selectedInsightData.resourceContent?.title}
+                            </p>
+                            <div>
+                              <p className="text-xs font-medium text-muted-foreground mb-2">Key Points:</p>
+                              <ul className="space-y-1">
+                                {selectedInsightData.keyPoints.map((point, index) => (
+                                  <li key={index} className="flex items-start gap-2 text-xs">
+                                    <span className="text-primary font-medium mt-0.5 shrink-0">
+                                      {index + 1}.
+                                    </span>
+                                    <span className="text-muted-foreground">{point}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
                           </div>
-                        ))}
-                      </div>
-                    </RadioGroup>
-                  )}
-                  
-                  {selectedInsight && (
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      onClick={() => setSelectedInsight("")}
-                      className="w-full"
-                    >
-                      <X className="h-3 w-3 mr-1" />
-                      Clear selection
-                    </Button>
+                        );
+                      })()}
+                    </div>
                   )}
                 </div>
               )}
@@ -486,40 +571,42 @@ export function GenerationWorkspace() {
         <div className="flex-1 flex flex-col">
           <Card className="flex-1 rounded-none border-0">
             <CardHeader className="border-b">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between h-[60px]">
                 <CardTitle className="text-lg">Generated Content</CardTitle>
                 
-                {generatedContent && (
-                  <div className="flex items-center gap-2">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="outline" size="sm">
-                          <Download className="h-4 w-4 mr-2" />
-                          Export
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent>
-                        <DropdownMenuItem onClick={() => exportContent("txt")}>
-                          <FileText className="h-4 w-4 mr-2" />
-                          Export as .txt
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => exportContent("md")}>
-                          <FileCode className="h-4 w-4 mr-2" />
-                          Export as .md
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={copyToClipboard}>
-                          <Copy className="h-4 w-4 mr-2" />
-                          Copy to clipboard
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                    
-                    <Button onClick={saveContent}>
-                      <Save className="h-4 w-4 mr-2" />
-                      Save
-                    </Button>
-                  </div>
-                )}
+                <div className="flex items-center gap-2 w-[140px] justify-end">
+                  {generatedContent && (
+                    <>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="outline" size="sm">
+                            <Download className="h-4 w-4 mr-2" />
+                            Export
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent>
+                          <DropdownMenuItem onClick={() => exportContent("txt")}>
+                            <FileText className="h-4 w-4 mr-2" />
+                            Export as .txt
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => exportContent("md")}>
+                            <FileCode className="h-4 w-4 mr-2" />
+                            Export as .md
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={copyToClipboard}>
+                            <Copy className="h-4 w-4 mr-2" />
+                            Copy to clipboard
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                      
+                      <Button onClick={saveContent}>
+                        <Save className="h-4 w-4 mr-2" />
+                        Save
+                      </Button>
+                    </>
+                  )}
+                </div>
               </div>
             </CardHeader>
             

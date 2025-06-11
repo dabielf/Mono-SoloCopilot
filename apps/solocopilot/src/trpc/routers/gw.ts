@@ -629,6 +629,7 @@ export const gwRouter = createTRPCRouter({
      */
     list: baseProcedure
       .input(PaginationInput.extend({
+        resourceId: z.number().optional(),
         personaId: z.string().optional(),
       }))
       .query(async ({ input }): Promise<PaginatedResponse<InsightWithRelations>> => {
@@ -637,6 +638,9 @@ export const gwRouter = createTRPCRouter({
           page: input.page.toString(),
           limit: input.limit.toString(),
         });
+        if (input.resourceId) {
+          searchParams.append('resourceId', input.resourceId.toString());
+        }
         if (input.personaId) {
           searchParams.append('personaId', input.personaId);
         }
@@ -655,6 +659,28 @@ export const gwRouter = createTRPCRouter({
           data: apiData.data,
           meta: apiData.meta
         } as PaginatedResponse<InsightWithRelations>;
+      }),
+
+    /**
+     * Get single insight by ID
+     */
+    get: baseProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ input }): Promise<InsightWithRelations> => {
+        const apiClient = createApiServerForTRPC();
+        const response = await apiClient.get(`gw/insight/${input.id}`);
+        return handleApiResponse<InsightWithRelations>(response);
+      }),
+
+    /**
+     * Delete insight
+     */
+    delete: baseProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }): Promise<{ success: boolean; message: string }> => {
+        const apiClient = createApiServerForTRPC();
+        const response = await apiClient.delete(`gw/insight/${input.id}`);
+        return handleApiResponse<{ success: boolean; message: string }>(response);
       }),
   }),
 });

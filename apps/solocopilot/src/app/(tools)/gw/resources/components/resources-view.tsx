@@ -9,6 +9,30 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { 
   FileText, 
   Book, 
@@ -18,16 +42,20 @@ import {
   Trash2,
   Lightbulb,
   Calendar,
-  FileX2
+  FileX2,
+  MoreHorizontal,
+  Eye
 } from "lucide-react";
 import { useState, useCallback } from "react";
 import { toast } from "sonner";
-import { ResourceCard } from "./resource-card";
+import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
+import type { ResourceContentList } from "@repo/zod-types";
 
 export function ResourcesView() {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
+  const router = useRouter();
   const [currentPage, setCurrentPage] = useState(1);
   const [uploadTab, setUploadTab] = useState<"pdf" | "epub" | "text">("pdf");
   const [textTitle, setTextTitle] = useState("");
@@ -37,6 +65,8 @@ export function ResourcesView() {
   const [isDragging, setIsDragging] = useState(false);
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [epubFile, setEpubFile] = useState<File | null>(null);
+  const [deleteResourceId, setDeleteResourceId] = useState<number | null>(null);
+  const [resourceToDelete, setResourceToDelete] = useState<ResourceContentList | null>(null);
 
   // Query resources
   const { data: resourcesData, isLoading } = useQuery(
@@ -216,6 +246,27 @@ export function ResourcesView() {
   const resources = resourcesData?.data || [];
   const hasMore = resourcesData?.meta?.hasMore || false;
 
+  const handleView = (resource: ResourceContentList) => {
+    router.push(`/gw/resources/${resource.id}`);
+  };
+
+  const handleExtractInsights = (resource: ResourceContentList) => {
+    router.push(`/gw/insights?resourceId=${resource.id}`);
+  };
+
+  const handleDeleteClick = (resource: ResourceContentList) => {
+    setResourceToDelete(resource);
+    setDeleteResourceId(resource.id);
+  };
+
+  const handleDeleteConfirm = () => {
+    if (deleteResourceId) {
+      deleteResource.mutate({ id: deleteResourceId });
+      setDeleteResourceId(null);
+      setResourceToDelete(null);
+    }
+  };
+
   return (
     <div className="space-y-6 p-6">
       {/* Header */}
@@ -232,62 +283,115 @@ export function ResourcesView() {
       </div>
 
       {/* Resources List */}
-      <div>
-        {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {[...Array(6)].map((_, i) => (
-              <Card key={i} className="animate-pulse">
-                <CardContent className="h-32" />
-              </Card>
-            ))}
-          </div>
-        ) : resources.length === 0 ? (
-          <Card>
-            <CardContent className="flex flex-col items-center justify-center py-12">
+      <Card>
+        <CardContent className="p-0">
+          {isLoading ? (
+            <div className="p-8 text-center">
+              <p className="text-muted-foreground">Loading resources...</p>
+            </div>
+          ) : resources.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12">
               <FileX2 className="h-12 w-12 text-muted-foreground mb-4" />
               <p className="text-lg font-medium mb-1">No resources yet</p>
               <p className="text-sm text-muted-foreground">
                 Upload your first document to get started
               </p>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {resources.map((resource) => (
-              <ResourceCard
-                key={resource.id}
-                resource={resource}
-                onDelete={() => deleteResource.mutate({ id: resource.id })}
-              />
-            ))}
-          </div>
-        )}
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Title</TableHead>
+                  <TableHead>Insights</TableHead>
+                  <TableHead>Created</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {resources.map((resource) => (
+                  <TableRow key={resource.id}>
+                    <TableCell className="font-medium">
+                      <button
+                        onClick={() => handleView(resource)}
+                        className="text-left hover:underline"
+                      >
+                        {resource.title}
+                      </button>
+                    </TableCell>
+                    <TableCell>
+                      {resource.insightCount > 0 ? (
+                        <Badge variant="secondary" className="text-xs">
+                          {resource.insightCount} insight{resource.insightCount !== 1 ? 's' : ''}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">None</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {new Date(resource.createdAt).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric"
+                      })}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="sm">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => handleView(resource)}>
+                            <Eye className="h-4 w-4 mr-2" />
+                            View Details
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleExtractInsights(resource)}>
+                            <Lightbulb className="h-4 w-4 mr-2" />
+                            Extract Insights
+                          </DropdownMenuItem>
+                          <DropdownMenuItem 
+                            onClick={() => handleDeleteClick(resource)}
+                            className="text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
 
-        {/* Pagination */}
-        {(currentPage > 1 || hasMore) && (
-          <div className="flex items-center justify-center gap-2 mt-6">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
-            >
-              Previous
-            </Button>
-            <span className="text-sm text-muted-foreground">
-              Page {currentPage}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setCurrentPage(p => p + 1)}
-              disabled={!hasMore}
-            >
-              Next
-            </Button>
-          </div>
-        )}
-      </div>  
+      {/* Pagination */}
+      {(currentPage > 1 || hasMore) && (
+        <div className="flex items-center justify-center gap-2 mt-6">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+            disabled={currentPage === 1}
+          >
+            Previous
+          </Button>
+          <span className="text-sm text-muted-foreground">
+            Page {currentPage}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage(p => p + 1)}
+            disabled={!hasMore}
+          >
+            Next
+          </Button>
+        </div>
+      )}  
 
       {/* Upload Section */}
       <Card>
@@ -482,6 +586,27 @@ export function ResourcesView() {
           </Tabs>
         </CardContent>
       </Card>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!deleteResourceId} onOpenChange={() => setDeleteResourceId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Resource</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{resourceToDelete?.title}"? This will also delete all insights extracted from this resource. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDeleteResourceId(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteConfirm}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );    
 }

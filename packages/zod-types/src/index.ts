@@ -186,6 +186,7 @@ export const CreatePersonaInput = z.object({
 export const ValueExtractorInput = z.object({
   personaId: z.string().min(1, "Persona ID is required"),
   resourceId: z.string().min(1, "Resource ID is required"),
+  topic: z.string().optional(),
 });
 
 export const UpdateGeneratedContentInput = z.object({

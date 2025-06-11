@@ -150,7 +150,7 @@ export function DashboardOverview() {
                   ))}
                   
                   <Button variant="outline" className="w-full" asChild>
-                    <Link href="/gw/generate">
+                    <Link href="/gw/writers">
                       View All Writers
                       <ArrowRight className="h-3 w-3 ml-1" />
                     </Link>

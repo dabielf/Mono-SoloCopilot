@@ -6,14 +6,16 @@ import { ResourceDetailSkeleton } from "../components/resource-detail-skeleton";
 export default async function ResourceDetailPage({ 
   params 
 }: { 
-  params: { id: string } 
+  params: Promise<{ id: string }> 
 }) {
-  await prefetch(trpc.gw.resources.get.queryOptions({ id: Number(params.id) }));
+  const { id } = await params;
+  
+  await prefetch(trpc.gw.resources.get.queryOptions({ id: Number(id) }));
   
   return (
     <HydrateClient>
       <Suspense fallback={<ResourceDetailSkeleton />}>
-        <ResourceDetail id={params.id} />
+        <ResourceDetail id={id} />
       </Suspense>
     </HydrateClient>
   );

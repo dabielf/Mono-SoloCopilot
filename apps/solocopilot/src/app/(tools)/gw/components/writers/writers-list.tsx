@@ -11,15 +11,27 @@ import {
   FileText,
   MoreHorizontal,
   Edit,
-  Trash2
+  Trash2,
+  AlertTriangle
 } from "lucide-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useTRPC } from "@/trpc/client";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
+import { useState } from "react";
 import { toast } from "sonner";
 
 export function WritersList() {
@@ -68,11 +80,14 @@ export function WritersList() {
 function GhostwriterCard({ writer }: { writer: any }) {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  
   const deleteGwMutationOptions = trpc.gw.ghostwriter.delete.mutationOptions({
     onSuccess: async () => {
       toast.success(`${writer.name} was deleted successfully!`);
       // Invalidate the listAll query to refresh the data
       await queryClient.invalidateQueries({ queryKey: trpc.gw.listAll.queryKey() });
+      setShowDeleteDialog(false);
     },
     onError: (error) => {
       console.error("Failed to delete ghostwriter:", error);
@@ -90,12 +105,19 @@ function GhostwriterCard({ writer }: { writer: any }) {
 
   const handleDelete = async () => {
     await deleteGwMutation.mutateAsync({ id: writer.id });
-   
+  };
+
+  const handleDeleteClick = () => {
+    setShowDeleteDialog(true);
   };
 
   const handleEdit = () => {
     toast.info("Edit functionality coming soon!");
   };
+
+  // Count data that will be deleted
+  const generatedContentCount = writer.generatedContents?.length || 0;
+  const trainingDataCount = writer.generatedContents?.filter((gc: any) => gc.isTrainingData)?.length || 0;
 
   return (
     <Card className="group hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer border-0 bg-gradient-to-br from-background to-muted/20">
@@ -130,7 +152,7 @@ function GhostwriterCard({ writer }: { writer: any }) {
           
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="opacity-0 group-hover:opacity-100 transition-opacity">
+              <Button variant="ghost" size="sm">
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
@@ -139,7 +161,7 @@ function GhostwriterCard({ writer }: { writer: any }) {
                 <Edit className="h-4 w-4 mr-2" />
                 Edit
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleDelete} className="text-destructive">
+              <DropdownMenuItem onClick={handleDeleteClick} className="text-destructive">
                 <Trash2 className="h-4 w-4 mr-2" />
                 Delete
               </DropdownMenuItem>
@@ -178,10 +200,7 @@ function GhostwriterCard({ writer }: { writer: any }) {
         </div>
 
         {/* Actions */}
-        <motion.div 
-          className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity"
-          initial={false}
-        >
+        <div className="flex gap-2">
           <Button size="sm" className="flex-1" asChild>
             <Link href={`/gw/generate?writer=${writer.id}`}>
               <Sparkles className="h-3 w-3 mr-1" />
@@ -193,8 +212,68 @@ function GhostwriterCard({ writer }: { writer: any }) {
               <Settings className="h-3 w-3" />
             </Link>
           </Button>
-        </motion.div>
+        </div>
       </CardContent>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Delete Ghostwriter "{writer.name}"
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-3">
+              <p>
+                <strong>This action cannot be undone.</strong> Deleting this ghostwriter will permanently remove:
+              </p>
+              
+              <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span>• The ghostwriter profile</span>
+                  <Badge variant="outline">1 item</Badge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>• Psychology & writing profiles</span>
+                  <Badge variant="outline">2 items</Badge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>• Original content samples</span>
+                  <Badge variant="outline">{writer.originalContents?.length || 0} items</Badge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>• Generated content</span>
+                  <Badge variant="outline">{generatedContentCount} items</Badge>
+                </div>
+                {trainingDataCount > 0 && (
+                  <div className="flex items-center justify-between">
+                    <span>• Training data marked for improvement</span>
+                    <Badge variant="outline">{trainingDataCount} items</Badge>
+                  </div>
+                )}
+                <div className="flex items-center justify-between">
+                  <span>• Performance logs and analysis</span>
+                  <Badge variant="outline">All related data</Badge>
+                </div>
+              </div>
+              
+              <p className="text-sm text-muted-foreground">
+                This will also delete any generated content from other ghostwriters that used the profiles from "{writer.name}".
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              disabled={deleteGwMutation.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteGwMutation.isPending ? "Deleting..." : "Delete Permanently"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }
