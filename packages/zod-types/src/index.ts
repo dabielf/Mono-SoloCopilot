@@ -286,6 +286,15 @@ export const UpdateGeneratedContentSchema = z.object({
   isTrainingData: z.boolean().optional(),
 });
 
+// Profile customization schemas
+export const CustomizeProfileInput = z.object({
+  modifications: z.string().min(1, "Modifications are required").describe("Instructions for how to modify the profile"),
+});
+
+export const CustomizeProfileSchema = z.object({
+  modifications: z.string().min(1),
+});
+
 // File conversion schemas
 export const PdfToTxtSchema = z.object({
   pdfFile: z.custom<File | Blob | ArrayBuffer>(
@@ -364,6 +373,14 @@ export const InsightWithRelationsSchema = InsightSchema.extend({
   resourceContent: z.object({ id: z.number(), title: z.string() }).optional(),
 });
 
+// Generated content with relations for list views
+export const GeneratedContentWithRelationsSchema = GeneratedContentSchema.extend({
+  writingProfile: z.object({ id: z.number(), name: z.string() }).optional(),
+  psyProfile: z.object({ id: z.number(), name: z.string() }).optional(),
+  persona: z.object({ id: z.number(), name: z.string() }).optional(),
+  ghostwriter: z.object({ id: z.number(), name: z.string() }).optional(),
+});
+
 // Paginated response schema
 export const PaginatedResponseSchema = <T extends z.ZodType>(dataSchema: T) => z.object({
   data: z.array(dataSchema),
@@ -413,6 +430,7 @@ export type PersonaList = z.infer<typeof PersonaListSchema>;
 export type ResourceContentList = z.infer<typeof ResourceContentListSchema>;
 export type ListAllResponse = z.infer<typeof ListAllResponseSchema>;
 export type InsightWithRelations = z.infer<typeof InsightWithRelationsSchema>;
+export type GeneratedContentWithRelations = z.infer<typeof GeneratedContentWithRelationsSchema>;
 export type PaginatedResponse<T> = {
   data: T[];
   meta?: {
@@ -429,6 +447,7 @@ export type GenerateContentData = z.infer<typeof GenerateContentInput>;
 export type SaveContentData = z.infer<typeof SaveContentInput>;
 export type CreatePersonaData = z.infer<typeof CreatePersonaInput>;
 export type UpdateGeneratedContentData = z.infer<typeof UpdateGeneratedContentInput>;
+export type CustomizeProfileData = z.infer<typeof CustomizeProfileInput>;
 
 // Response types
 export type GenerateContentResponse = z.infer<typeof GenerateContentResponseSchema>;

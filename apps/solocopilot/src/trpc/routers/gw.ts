@@ -39,6 +39,7 @@ import {
   UpdateGeneratedContentInput,
   PaginationInput,
   TextToResourceSchema,
+  CustomizeProfileInput,
   type ApiResponseType,
   type ListAllResponse,
   type InsightWithRelations,
@@ -50,6 +51,7 @@ import {
   type Ghostwriter,
   type OriginalContent,
   type GeneratedContent,
+  type GeneratedContentWithRelations,
   type Persona,
   type ResourceContent,
   type ResourceContentList,
@@ -254,6 +256,51 @@ export const gwRouter = createTRPCRouter({
       }),
 
     /**
+     * Get all generated content with pagination and filtering
+     */
+    list: baseProcedure
+      .input(PaginationInput.extend({
+        writingProfileId: z.number().optional(),
+        psyProfileId: z.number().optional(),
+        personaId: z.number().optional(),
+        ghostwriterId: z.number().optional(),
+      }))
+      .query(async ({ input }): Promise<PaginatedResponse<GeneratedContentWithRelations>> => {
+        const apiClient = createApiServerForTRPC();
+        const searchParams = new URLSearchParams({
+          page: input.page.toString(),
+          limit: input.limit.toString(),
+        });
+        if (input.writingProfileId) {
+          searchParams.append('writingProfileId', input.writingProfileId.toString());
+        }
+        if (input.psyProfileId) {
+          searchParams.append('psyProfileId', input.psyProfileId.toString());
+        }
+        if (input.personaId) {
+          searchParams.append('personaId', input.personaId.toString());
+        }
+        if (input.ghostwriterId) {
+          searchParams.append('ghostwriterId', input.ghostwriterId.toString());
+        }
+        const response = await apiClient.get(`gw/generated-content-list?${searchParams}`);
+        const apiData = await response.json() as ApiResponseType<GeneratedContentWithRelations[]>;
+        
+        if (!apiData.success) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: apiData.error.message,
+            cause: apiData.error,
+          });
+        }
+        
+        return {
+          data: apiData.data,
+          meta: apiData.meta
+        } as PaginatedResponse<GeneratedContentWithRelations>;
+      }),
+
+    /**
      * Update generated content (feedback and training status)
      */
     update: baseProcedure
@@ -344,6 +391,22 @@ export const gwRouter = createTRPCRouter({
         const response = await apiClient.post(`gw/psyprofile/train/${input.gwid}`);
         return handleApiResponse<{ improvedPsyProfile: string }>(response);  
       }),
+
+    /**
+     * Customize psychology profile with modifications
+     */
+    customize: baseProcedure
+      .input(z.object({ 
+        id: z.number(),
+        modifications: z.string().min(1, "Modifications are required")
+      }))
+      .mutation(async ({ input }): Promise<PsyProfile> => {
+        const apiClient = createApiServerForTRPC();
+        const { id, modifications } = input;
+        const formData = createFormData({ modifications });
+        const response = await apiClient.post(`gw/psyprofile/customize/${id}`, { body: formData });
+        return handleApiResponse<PsyProfile>(response);
+      }),
   }),
 
   // =====================================================
@@ -399,6 +462,22 @@ export const gwRouter = createTRPCRouter({
         const apiClient = createApiServerForTRPC();
         const response = await apiClient.post(`gw/writingprofile/train/${input.gwid}`);
         return handleApiResponse<{ improvedWritingProfile: string }>(response);
+      }),
+
+    /**
+     * Customize writing profile with modifications
+     */
+    customize: baseProcedure
+      .input(z.object({ 
+        id: z.number(),
+        modifications: z.string().min(1, "Modifications are required")
+      }))
+      .mutation(async ({ input }): Promise<WritingProfile> => {
+        const apiClient = createApiServerForTRPC();
+        const { id, modifications } = input;
+        const formData = createFormData({ modifications });
+        const response = await apiClient.post(`gw/writingprofile/customize/${id}`, { body: formData });
+        return handleApiResponse<WritingProfile>(response);
       }),
   }),
 
