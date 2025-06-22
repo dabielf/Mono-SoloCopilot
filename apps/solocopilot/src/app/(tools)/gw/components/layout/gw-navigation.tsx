@@ -64,8 +64,8 @@ const navigationItems = [
         badge: "profiles"
       },
       {
-        title: "History",
-        href: "/gw/history",
+        title: "Generated Content",
+        href: "/gw/generated-content",
         icon: History,
         description: "Generated content",
         badge: "generated"

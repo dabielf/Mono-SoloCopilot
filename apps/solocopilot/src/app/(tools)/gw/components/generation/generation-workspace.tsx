@@ -38,13 +38,28 @@ import type {
 import { useTRPC } from "@/trpc/client";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useGwSocket } from "@/hooks/use-socket";
 
 type GenerationMode = "writer" | "custom";
 
 export function GenerationWorkspace() {
   const trpc = useTRPC();
   const { data: overview } = useQuery(trpc.gw.listAll.queryOptions());
+  const { sendMessage, onMessage } = useGwSocket('dabielf@gmail.com');
   const searchParams = useSearchParams();
+
+  onMessage((message) => {
+    const data = JSON.parse(message);
+    console.log(data)
+    if (data.type === "success") {
+      setGeneratedContent(data.content);
+      setIsGenerating(false);
+    }
+    if (data.type === "error") {
+      toast.error(data.message);
+      setIsGenerating(false);
+    }
+  });
 
   const writerId = searchParams.get("writer");
   const insightId = searchParams.get("insight");
@@ -84,26 +99,11 @@ export function GenerationWorkspace() {
     if (insightsData.data && Array.isArray(insightsData.data)) return insightsData.data;
     return [];
   })();
-  
 
-  // TRPC mutations
-  const generateContentMutationOptions = trpc.gw.content.generate.mutationOptions({
-    onSuccess: (data) => {
-      setGeneratedContent(data.content);
-      toast.success("Content generated successfully!");
-    },
-    onError: (error) => {
-      toast.error(`Failed to generate content: ${error.message}`);
-    },
-    onSettled: () => {
-      setIsGenerating(false);
-    },
-  });
-  const generateContentMutation = useMutation(generateContentMutationOptions);
 
   const saveContentMutationOptions = trpc.gw.content.save.mutationOptions({
     onSuccess: () => {
-      toast.success("Content saved to history!");
+      toast.success("Content saved successfully!");
     },
     onError: (error) => {
       console.error("Failed to save content:", error);
@@ -161,7 +161,8 @@ export function GenerationWorkspace() {
         };
       }
       
-      await generateContentMutation.mutateAsync(payload);
+      sendMessage(JSON.stringify({ type: "generate", args:payload }));
+      // await generateContentMutation.mutateAsync(payload);
     } catch (error) {
       console.error("Failed to generate content:", error);
     }
@@ -458,17 +459,12 @@ export function GenerationWorkspace() {
                                           <div className="mt-2">
                                             <p className="text-xs font-medium text-muted-foreground mb-1">Key points:</p>
                                             <ul className="text-xs text-muted-foreground space-y-1">
-                                              {insight.keyPoints.slice(0, 3).map((point, index) => (
+                                              {insight.keyPoints.map((point, index) => (
                                                 <li key={index} className="flex items-start gap-1">
                                                   <span className="text-primary">•</span>
                                                   <span>{point}</span>
                                                 </li>
                                               ))}
-                                              {insight.keyPoints.length > 3 && (
-                                                <li className="text-muted-foreground/70">
-                                                  +{insight.keyPoints.length - 3} more points
-                                                </li>
-                                              )}
                                             </ul>
                                           </div>
                                         </div>

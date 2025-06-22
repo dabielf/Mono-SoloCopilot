@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
-export function HistorySkeleton() {
+export function GeneratedContentSkeleton() {
   return (
     <div className="space-y-6 p-6">
       {/* Header skeleton */}
@@ -36,7 +36,7 @@ export function HistorySkeleton() {
         </div>
       </div>
 
-      {/* History list skeleton */}
+      {/* Generated content list skeleton */}
       <div className="space-y-2">
         {[...Array(5)].map((_, i) => (
           <div key={i} className="border rounded-lg p-4 bg-card">

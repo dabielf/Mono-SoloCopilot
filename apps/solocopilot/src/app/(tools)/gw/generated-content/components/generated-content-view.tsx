@@ -34,20 +34,21 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence } from "motion/react";
 import type { GeneratedContentWithRelations } from "@repo/zod-types";
+import { EditContentDialog } from "./edit-content-dialog";
 
-interface HistoryViewProps {
+interface GeneratedContentViewProps {
   writingProfileId?: string;
   psyProfileId?: string;
   personaId?: string;
   ghostwriterId?: string;
 }
 
-export function HistoryView({ 
+export function GeneratedContentView({ 
   writingProfileId: initialWritingProfileId,
   psyProfileId: initialPsyProfileId,
   personaId: initialPersonaId,
   ghostwriterId: initialGhostwriterId
-}: HistoryViewProps) {
+}: GeneratedContentViewProps) {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -59,6 +60,7 @@ export function HistoryView({
   const [selectedPsyProfile, setSelectedPsyProfile] = useState<string>(initialPsyProfileId || "all");
   const [selectedPersona, setSelectedPersona] = useState<string>(initialPersonaId || "all");
   const [selectedGhostwriter, setSelectedGhostwriter] = useState<string>(initialGhostwriterId || "all");
+  const [editContent, setEditContent] = useState<GeneratedContentWithRelations | null>(null);
 
   // Query all data for filter dropdowns
   const { data: allData } = useQuery(trpc.gw.listAll.queryOptions());
@@ -117,22 +119,13 @@ export function HistoryView({
 
   const isExpanded = (contentId: number) => expandedContent.has(contentId);
 
-  const getEditUrl = (content: GeneratedContentWithRelations) => {
-    const params = new URLSearchParams();
-    if (content.writingProfile?.id) params.append('writingProfile', content.writingProfile.id.toString());
-    if (content.psyProfile?.id) params.append('psychologyProfile', content.psyProfile.id.toString());
-    if (content.persona?.id) params.append('persona', content.persona.id.toString());
-    if (content.ghostwriter?.id) params.append('ghostwriter', content.ghostwriter.id.toString());
-    params.append('prompt', content.prompt);
-    return `/gw/generate?${params.toString()}`;
-  };
 
   return (
     <div className="space-y-6 p-6">
       {/* Header */}
       <div>
         <div className="flex items-center gap-4">
-          <h1 className="text-2xl font-bold">Content History</h1>
+          <h1 className="text-2xl font-bold">Generated Content</h1>
           <Badge variant="secondary" className="text-sm font-light">
             {contentData?.meta?.total || 0} items
           </Badge>
@@ -369,16 +362,14 @@ export function HistoryView({
                   <Button
                     variant="default"
                     size="sm"
-                    asChild
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditContent(item);
+                    }}
                     className="shrink-0"
                   >
-                    <Link
-                      href={getEditUrl(item)}
-                      className="flex items-center gap-1"
-                    >
-                      <Edit className="h-4 w-4" />
-                      <span className="text-xs">Edit</span>
-                    </Link>
+                    <Edit className="h-4 w-4" />
+                    <span className="text-xs">Edit</span>
                   </Button>
                   <Button
                     variant="ghost"
@@ -475,6 +466,17 @@ export function HistoryView({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Edit Content Dialog */}
+      {editContent && (
+        <EditContentDialog
+          open={!!editContent}
+          onOpenChange={(open) => {
+            if (!open) setEditContent(null);
+          }}
+          content={editContent}
+        />
+      )}
     </div>
   );
 }

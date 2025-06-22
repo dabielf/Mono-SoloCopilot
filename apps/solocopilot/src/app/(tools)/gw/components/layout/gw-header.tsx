@@ -13,7 +13,7 @@ const routeLabels: Record<string, string> = {
   "/gw/generate": "Generate Content",
   "/gw/writers": "Ghostwriters",
   "/gw/profiles": "Profiles",
-  "/gw/history": "Content History",
+  "/gw/generated-content": "Generated Content",
   "/gw/training": "Training Center",
   "/gw/personas": "Personas",
   "/gw/resources": "Resources",

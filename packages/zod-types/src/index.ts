@@ -190,6 +190,7 @@ export const ValueExtractorInput = z.object({
 });
 
 export const UpdateGeneratedContentInput = z.object({
+  content: z.string().optional(),
   userFeedBack: z.string().optional(),
   isTrainingData: z.boolean().optional(),
 });

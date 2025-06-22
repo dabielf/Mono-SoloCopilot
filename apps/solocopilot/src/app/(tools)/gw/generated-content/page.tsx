@@ -1,9 +1,9 @@
 import { prefetch, trpc, HydrateClient } from "@/trpc/server";
 import { Suspense } from "react";
-import { HistoryView } from "./components/history-view";
-import { HistorySkeleton } from "./components/history-skeleton";
+import { GeneratedContentView } from "./components/generated-content-view";
+import { GeneratedContentSkeleton } from "./components/generated-content-skeleton";
 
-export default async function HistoryPage({
+export default async function GeneratedContentPage({
   searchParams,
 }: {
   searchParams: Promise<{ 
@@ -30,8 +30,8 @@ export default async function HistoryPage({
   
   return (
     <HydrateClient>
-      <Suspense fallback={<HistorySkeleton />}>
-        <HistoryView 
+      <Suspense fallback={<GeneratedContentSkeleton />}>
+        <GeneratedContentView 
           writingProfileId={params.writingProfileId}
           psyProfileId={params.psyProfileId}
           personaId={params.personaId}

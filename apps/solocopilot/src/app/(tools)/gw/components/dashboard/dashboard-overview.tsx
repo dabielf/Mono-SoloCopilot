@@ -213,8 +213,8 @@ export function DashboardOverview() {
               </div>
               
               <Button variant="outline" className="w-full" asChild>
-                <Link href="/gw/history">
-                  View Full History
+                <Link href="/gw/generated-content">
+                  View All Generated Content
                   <ArrowRight className="h-3 w-3 ml-1" />
                 </Link>
               </Button>
